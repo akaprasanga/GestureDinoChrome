@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Dino</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+</head>
+<body>
+    <h1>Gesture Dino Chrome: No Internet Game</h1>
+    
+    <!-- Updated instruction message -->
+    <div class="initial-instruction">Open the Webcam to use Hand Gestures for Jumping!</div>
+    
+    <div class="button-container">
+        <button onclick="startWebcam()" class="primary-btn">Start Webcam</button>
+        <button onclick="startGame()" id="startGameBtn" class="secondary-btn" disabled>Start/Restart Game</button>
+    </div>
+    <div id="modelLoadingStatus" class="loading-status"></div>
+
+    <div class="instruction-container">
+        <div class="gesture-instruction">
+            <img src="assets/images/open_hand.png" alt="Open Hand" class="gesture-img">
+            <span class="instruction-text">JUMP</span>
+        </div>
+        <div class="game-container" id="game-container">
+            <div class="score" id="score">Score: 0</div>
+            <div class="dino" id="dino"></div>
+            <div class="obstacle" id="obstacle"></div>
+            <div class="game-over-text" id="game-over-text">Game Over</div>
+        </div>
+        <div class="gesture-instruction">
+            <img src="assets/images/close_hand.png" alt="Closed Hand" class="gesture-img">
+            <span class="instruction-text">DON'T JUMP</span>
+        </div>
+    </div>
+
+    <div class="webcam-section">
+        <div class="gesture-instruction">
+            <img src="assets/images/open_hand.png" alt="Open Hand" class="gesture-img">
+            <span class="instruction-text">JUMP</span>
+        </div>
+        <div class="webcam-container" id="webcam-container">
+            <video id="webcam" autoplay></video>
+            <div id="gesture-output">Detected Gesture: None</div>
+            <p id="game-instruction" class="spacebar-instruction">If you dont want to use hand gesture, press spacebar to jump!</p>
+        </div>
+        <div class="gesture-instruction">
+            <img src="assets/images/close_hand.png" alt="Closed Hand" class="gesture-img">
+            <span class="instruction-text">DON'T JUMP</span>
+        </div>
+    </div>
+    <script src="gestureWorker.js"></script>
+    <script>
+        let gameStarted = false;
+        let gameOver = false;
+        let gameInterval;
+        let score = 0;
+        let scoreInterval;
+        let gestureWorker;
+        let isProcessing = false;
+        
+        function initGestureWorker() {
+            gestureWorker = new Worker('gestureWorker.js');
+            gestureWorker.onmessage = function(e) {
+                switch (e.data.type) {
+                    case 'modelLoaded':
+                        console.log('Handpose model loaded in worker');
+                        document.querySelector(".initial-instruction").style.display = "none";
+                        document.getElementById("modelLoadingStatus").style.display = "none";
+                        document.getElementById("startGameBtn").disabled = false;
+                        startGestureDetection();
+                        break;
+                    case 'gestureDetected':
+                        document.getElementById("gesture-output").textContent = 
+                            `Detected Gesture: ${e.data.gesture}`;
+                        if (e.data.gesture === "Open Hand") {
+                            jump();
+                        }
+                        break;
+                    case 'processingComplete':
+                        isProcessing = false;
+                        break;
+                    case 'error':
+                        console.error('Worker error:', e.data.error);
+                        isProcessing = false;
+                        break;
+                }
+            };
+            
+            gestureWorker.onerror = function(error) {
+                console.error('Worker error:', error);
+                isProcessing = false;
+            };
+            
+            gestureWorker.postMessage({ type: 'init' });
+        }
+        
+        function startGestureDetection() {
+            const video = document.getElementById("webcam");
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 600;
+            canvas.height = 400;
+            
+            function processFrame() {
+                if (!isProcessing && video.readyState === video.HAVE_ENOUGH_DATA) {
+                    isProcessing = true;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    
+                    gestureWorker.postMessage({
+                        type: 'detect',
+                        imageData: imageData,
+                        width: canvas.width,
+                        height: canvas.height
+                    }, [imageData.data.buffer]);
+                }
+                requestAnimationFrame(processFrame);
+            }
+            
+            processFrame();
+        }
+
+        function startGame() {
+            gameStarted = true;
+            gameOver = false;
+            score = 0;
+            document.getElementById("score").textContent = "Score: 0";
+            document.getElementById("game-container").style.display = "block";
+            document.getElementById("game-over-text").style.display = "none";
+            document.getElementById("game-instruction").style.display = "block";
+            startObstacle();
+        }
+
+        document.addEventListener("keydown", function(event) {
+            if (event.code === "Space" && gameStarted && !gameOver) {
+                event.preventDefault();
+                jump();
+            }
+        });
+
+        let lastJumpTime = 0;
+        const JUMP_COOLDOWN = 750; // 1 second cooldown
+
+        function jump() {
+            if (!gameStarted || gameOver) return;
+            
+            const currentTime = Date.now();
+            if (currentTime - lastJumpTime < JUMP_COOLDOWN) return;
+            
+            let dino = document.getElementById("dino");
+            if (!dino.classList.contains("jump")) {
+                dino.classList.add("jump");
+                lastJumpTime = currentTime;
+                setTimeout(function() {
+                    dino.classList.remove("jump");
+                }, 500);
+            }
+        }
+
+        function checkCollision() {
+            let dino = document.getElementById("dino");
+            let obstacle = document.getElementById("obstacle");
+            let dinoTop = parseInt(window.getComputedStyle(dino).getPropertyValue("bottom"));
+            let obstacleLeft = parseInt(window.getComputedStyle(obstacle).getPropertyValue("right"));
+            if (obstacleLeft > 550 && obstacleLeft < 565 && dinoTop <= 20) {
+                gameOver = true;
+                gameStarted = false;
+                clearInterval(gameInterval);
+                clearInterval(scoreInterval);
+                obstacle.style.animation = "none";
+                document.getElementById("game-over-text").style.display = "block";
+                // console.log("Game Over");
+                // console.log(obstacleLeft);
+            }
+        }
+
+        function startWebcam() {
+            const loadingStatus = document.getElementById("modelLoadingStatus");
+            loadingStatus.style.display = "block";
+            document.getElementById("webcam-container").style.display = "block";
+            
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function(stream) {
+                    const video = document.getElementById("webcam");
+                    video.srcObject = stream;
+                    video.addEventListener('loadeddata', async () => {
+                        console.log("Webcam loaded, initializing gesture worker...");
+                        loadingStatus.textContent = "Loading hand detection model...";
+                        await initGestureWorker();
+                    });
+                })
+                .catch(function(error) {
+                    console.error("Error accessing webcam:", error);
+                    loadingStatus.textContent = "Error: Unable to access webcam";
+                    loadingStatus.style.color = "#e74c3c";
+                    alert("Unable to access webcam. Please make sure you have a webcam connected and have granted permission to use it.");
+                });
+        }
+
+        function startObstacle() {
+            let obstacle = document.getElementById("obstacle");
+            obstacle.style.animation = "moveObstacle 2s infinite linear";
+            
+            // Start collision detection
+            gameInterval = setInterval(checkCollision, 10);
+            
+            // Start score counter
+            scoreInterval = setInterval(function() {
+                if (!gameOver) {
+                    score++;
+                    document.getElementById("score").textContent = "Score: " + score;
+                }
+            }, 100);
+        }
+    </script>
+    <footer class="footer">
+        <a href="https://ask.prasanganeupane.com.np/" target="_blank" class="developer-link">
+            Learn more about the developer: Prasang Neupane
+        </a>
+    </footer>
+</body>
+</html>
