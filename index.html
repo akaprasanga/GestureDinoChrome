@@ -3,13 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gesture Dino</title>
+    <title>Gesture Penguin</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon/apple-touch-icon.png">
+    <link rel="manifest" href="/assets/favicon/site.webmanifest">
+    <link rel="shortcut icon" href="/assets/favicon/favicon.ico">
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
 </head>
 <body>
-    <h1>Gesture Dino Chrome: No Internet Game</h1>
+    <h1>Gesture Penguin Jump: No Internet Game</h1>
     
     <!-- Updated instruction message -->
     <div class="initial-instruction">Open the Webcam to use Hand Gestures for Jumping!</div>
@@ -27,7 +32,7 @@
         </div>
         <div class="game-container" id="game-container">
             <div class="score" id="score">Score: 0</div>
-            <div class="dino" id="dino"></div>
+            <div class="penguin" id="penguin"></div>
             <div class="obstacle" id="obstacle"></div>
             <div class="game-over-text" id="game-over-text">Game Over</div>
         </div>
@@ -61,6 +66,11 @@
         let scoreInterval;
         let gestureWorker;
         let isProcessing = false;
+        
+        // Obstacle height variables
+        let obstacleHeight = 30;
+        let minObstacleHeight = 30;
+        let maxObstacleHeight = 60;
         
         function initGestureWorker() {
             gestureWorker = new Worker('gestureWorker.js');
@@ -125,6 +135,12 @@
         }
 
         function startGame() {
+            let obstacle = document.getElementById("obstacle");
+            
+            // Remove existing animation iteration listeners
+            let oldObstacle = obstacle.cloneNode(true);
+            obstacle.parentNode.replaceChild(oldObstacle, obstacle);
+            
             gameStarted = true;
             gameOver = false;
             score = 0;
@@ -151,30 +167,30 @@
             const currentTime = Date.now();
             if (currentTime - lastJumpTime < JUMP_COOLDOWN) return;
             
-            let dino = document.getElementById("dino");
-            if (!dino.classList.contains("jump")) {
-                dino.classList.add("jump");
+            let penguin = document.getElementById("penguin");
+            if (!penguin.classList.contains("jump")) {
+                penguin.classList.add("jump");
                 lastJumpTime = currentTime;
                 setTimeout(function() {
-                    dino.classList.remove("jump");
+                    penguin.classList.remove("jump");
                 }, 500);
             }
         }
 
         function checkCollision() {
-            let dino = document.getElementById("dino");
+            let penguin = document.getElementById("penguin");
             let obstacle = document.getElementById("obstacle");
-            let dinoTop = parseInt(window.getComputedStyle(dino).getPropertyValue("bottom"));
-            let obstacleLeft = parseInt(window.getComputedStyle(obstacle).getPropertyValue("right"));
-            if (obstacleLeft > 550 && obstacleLeft < 565 && dinoTop <= 20) {
+            let penguinBottom = parseInt(window.getComputedStyle(penguin).getPropertyValue("bottom"));
+            let obstacleLeft = parseInt(window.getComputedStyle(obstacle).getPropertyValue("left"));
+            
+            // Check collision using position from left
+            if (obstacleLeft < 70 && obstacleLeft > 45 && penguinBottom <= obstacleHeight*0.85) {
                 gameOver = true;
                 gameStarted = false;
                 clearInterval(gameInterval);
                 clearInterval(scoreInterval);
                 obstacle.style.animation = "none";
                 document.getElementById("game-over-text").style.display = "block";
-                // console.log("Game Over");
-                // console.log(obstacleLeft);
             }
         }
 
@@ -203,7 +219,25 @@
 
         function startObstacle() {
             let obstacle = document.getElementById("obstacle");
+            
+            // Function to generate random height
+            function getRandomHeight() {
+                return Math.floor(Math.random() * (maxObstacleHeight - minObstacleHeight + 1)) + minObstacleHeight;
+            }
+            
+            // Set initial random height
+            obstacleHeight = getRandomHeight();
+            obstacle.style.height = obstacleHeight + 'px';
+            
+            // Start the obstacle animation
             obstacle.style.animation = "moveObstacle 2s infinite linear";
+            
+            // Update height when obstacle completes one cycle
+            obstacle.addEventListener('animationiteration', () => {
+                obstacleHeight = getRandomHeight();
+                obstacle.style.height = obstacleHeight + 'px';
+                console.log('New obstacle height:', obstacleHeight);
+            });
             
             // Start collision detection
             gameInterval = setInterval(checkCollision, 10);
