@@ -12,6 +12,9 @@
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
 </head>
 <body>
     <h1>Gesture Penguin Jump: No Internet Game</h1>
@@ -149,6 +152,11 @@
             document.getElementById("game-over-text").style.display = "none";
             document.getElementById("game-instruction").style.display = "block";
             startObstacle();
+            
+            // Adjust game speed for mobile
+            if (window.innerWidth <= 768) {
+                document.documentElement.style.setProperty('--game-speed', '2.5s');
+            }
         }
 
         document.addEventListener("keydown", function(event) {
@@ -159,7 +167,7 @@
         });
 
         let lastJumpTime = 0;
-        const JUMP_COOLDOWN = 750; // 1 second cooldown
+        const JUMP_COOLDOWN = 1000; // Keep the cooldown
 
         function jump() {
             if (!gameStarted || gameOver) return;
@@ -171,9 +179,14 @@
             if (!penguin.classList.contains("jump")) {
                 penguin.classList.add("jump");
                 lastJumpTime = currentTime;
+                
+                // Force browser to handle animations more smoothly
+                penguin.style.willChange = 'transform, bottom';
+                
                 setTimeout(function() {
                     penguin.classList.remove("jump");
-                }, 500);
+                    penguin.style.willChange = 'auto'; // Cleanup
+                }, 600);
             }
         }
 
@@ -250,6 +263,24 @@
                 }
             }, 100);
         }
+
+        // Add this after your existing event listeners
+        document.addEventListener('touchstart', function(event) {
+            if (gameStarted && !gameOver) {
+                event.preventDefault();
+                jump();
+            }
+        });
+
+        // Add resize handler for responsive adjustments
+        window.addEventListener('resize', function() {
+            if (gameStarted) {
+                const obstacle = document.getElementById('obstacle');
+                obstacle.style.animation = 'none';
+                obstacle.offsetHeight; // Trigger reflow
+                obstacle.style.animation = null;
+            }
+        });
     </script>
     <footer class="footer">
         <a href="https://ask.prasanganeupane.com.np/" target="_blank" class="developer-link">
